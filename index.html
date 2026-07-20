@@ -272,6 +272,9 @@ table.dt tr:last-child td{border-bottom:none}
   body *{visibility:hidden}
   #printArea,#printArea *{visibility:visible}
   #printArea{position:absolute;left:0;top:0;width:100%}
+  #printArea,#printArea *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #printArea img{display:inline-block!important}
+  .ba-sign .ba-cap{mix-blend-mode:multiply;opacity:.85}
   .print-sheet{border:none;padding:10mm}
 }
 </style>
@@ -547,7 +550,7 @@ function closeZoom(){ window.removeEventListener('mousemove', _zoomMouseMove); v
    - Di dalam GAS Web App: pakai google.script.run
    - Di GitHub Pages (statis): pakai fetch ke GAS_URL (config.js)
 ============================================================ */
-var GAS_URL = (window.APP_CONFIG && window.APP_CONFIG.GAS_URL) || '';
+var GAS_URL = (window.APP_CONFIG && window.APP_CONFIG.GAS_URL) || 'https://script.google.com/macros/s/AKfycbyp9FKVL5AN1fz06F_BR8qFBEgClXZHHJjfRBp_UXm0R05FLO0Y8zBUuOnl_ikewl8K/exec';
 var IS_GAS = (typeof google !== 'undefined' && google.script && google.script.run);
 
 function callServer(fnName, args){
@@ -1326,10 +1329,22 @@ function renderPrintSheet(id){
 }
 function doPrint(){
   $('printArea').classList.remove('hidden');
-  setTimeout(function(){
-    window.print();
-    setTimeout(function(){ $('printArea').classList.add('hidden'); }, 400);
-  }, 60);
+  waitImagesThenPrint(function(){ $('printArea').classList.add('hidden'); });
+}
+// Tunggu semua gambar (data URL tanda tangan/cap/logo) selesai di-decode sebelum cetak
+function waitImagesThenPrint(after){
+  var pa = $('printArea');
+  var imgs = Array.prototype.slice.call(pa.querySelectorAll('img'));
+  var printed = false;
+  function fire(){ if(printed) return; printed = true; try{ window.print(); } finally { if(after) setTimeout(after, 500); } }
+  if(!imgs.length){ setTimeout(fire, 60); return; }
+  var proms = imgs.map(function(im){
+    try { if(im.decode) return im.decode().catch(function(){}); } catch(e){}
+    if(im.complete) return Promise.resolve();
+    return new Promise(function(res){ im.addEventListener('load', res); im.addEventListener('error', res); });
+  });
+  Promise.all(proms).then(function(){ setTimeout(fire, 90); });
+  setTimeout(fire, 3000); // jaring pengaman bila ada gambar yang macet
 }
 
 /* ============================================================
@@ -1939,7 +1954,8 @@ function printBerita(b){
   '</div>';
   var pa = $('printArea'); pa.innerHTML = html;
   closeModal();
-  setTimeout(function(){ window.print(); }, 120);
+  pa.classList.remove('hidden');
+  waitImagesThenPrint(function(){ pa.classList.add('hidden'); });
 }
 
 
