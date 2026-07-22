@@ -267,6 +267,15 @@ table.dt tr:last-child td{border-bottom:none}
 .ba-sign .ba-cap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-13deg);max-height:118px;max-width:170px;object-fit:contain;opacity:.82;mix-blend-mode:multiply;z-index:1;pointer-events:none}
 .ba-sign .ba-name{font-weight:800;border-top:1px solid #334;display:inline-block;padding-top:4px;min-width:170px;margin-top:2px}
 .ba-sign .ba-job{font-size:11.5px;color:#556}
+/* Tanda tangan penerbit di invoice */
+.print-sheet .sign-wrap{display:flex;justify-content:flex-end;margin-top:26px}
+.print-sheet .sign-block{text-align:center;min-width:230px}
+.print-sheet .sign-place,.print-sheet .sign-role{font-size:12.5px;margin-bottom:2px}
+.print-sheet .sign-ttd{position:relative;height:96px;display:flex;align-items:center;justify-content:center}
+.print-sheet .sign-sig{max-height:88px;max-width:190px;object-fit:contain;position:relative;z-index:2}
+.print-sheet .sign-cap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-12deg);max-height:112px;max-width:165px;object-fit:contain;opacity:.82;mix-blend-mode:multiply;z-index:1;pointer-events:none}
+.print-sheet .sign-name{font-weight:800;border-top:1px solid #334;display:inline-block;padding-top:4px;min-width:180px}
+.print-sheet .sign-job{font-size:11.5px;color:#556}
 
 @media print{
   body *{visibility:hidden}
@@ -274,7 +283,7 @@ table.dt tr:last-child td{border-bottom:none}
   #printArea{position:absolute;left:0;top:0;width:100%}
   #printArea,#printArea *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   #printArea img{display:inline-block!important}
-  .ba-sign .ba-cap{mix-blend-mode:multiply;opacity:.85}
+  .ba-sign .ba-cap,.print-sheet .sign-cap{mix-blend-mode:multiply;opacity:.85}
   .print-sheet{border:none;padding:10mm}
 }
 </style>
@@ -688,7 +697,7 @@ function buildSidebar(){
 
 function go(tab){
   state.tab = tab;
-  if(tab==='settings'){ _logoData = null; _appLogoData = null; _stampData = null; }
+  if(tab==='settings'){ _logoData = null; _appLogoData = null; _stampData = null; _signatureData = null; }
   $('pageTitle').textContent = TITLES[tab] || 'Dasbor';
   document.querySelectorAll('.bn-item').forEach(function(b){
     b.classList.toggle('active', b.dataset.tab === tab || (b.dataset.tab==='more' && ['recurring','berita','tax','logs','settings','users'].indexOf(tab)!==-1));
@@ -1076,7 +1085,8 @@ function openInvoiceEditor(id){
       status:'unpaid', clientName:'', clientEmail:'', clientPhone:'', clientAddress:'',
       items:[{ id:'it-'+Date.now(), name:'', quantity:1, price:0, total:0 }],
       discountRate:0, currency: s.defaultCurrency||'IDR', notes:'',
-      templateId:'professional', category:'Lainnya', appliedTaxes:[], paymentPhases:[], reminders:[], reminderCount:0
+      templateId:'professional', category:'Lainnya', appliedTaxes:[], paymentPhases:[], reminders:[], reminderCount:0,
+      signature:'', stamp:'', signerName:(s.signerName||''), signerTitle:(s.signerTitle||'')
     };
   }
   renderEditor();
@@ -1155,12 +1165,38 @@ function renderEditor(){
 
     '<div class="field" style="margin-top:16px"><label>Catatan</label><textarea id="edNotes" rows="2">'+esc(e.notes)+'</textarea></div>' +
 
+    '<div class="section-title">Tanda Tangan & Cap Penerbit (opsional)</div>' +
+    '<div class="grid-2">' +
+      '<div class="field"><label>Nama Penanda Tangan</label><input id="edSignerName" value="'+esc(e.signerName||s.signerName||'')+'" placeholder="mis. '+esc(s.companyName||'nama Anda')+'"></div>' +
+      '<div class="field"><label>Jabatan</label><input id="edSignerTitle" value="'+esc(e.signerTitle||s.signerTitle||'')+'" placeholder="mis. Direktur"></div>' +
+    '</div>' +
+    '<div class="grid-2">' +
+      '<div><label style="font-size:12px;font-weight:600;color:var(--muted)">Tanda Tangan</label>' +
+        '<div class="sigpad-wrap'+(e.signature?' has-ink':'')+'"><canvas id="sigpadInv" class="sigpad"></canvas>' +
+          '<div class="sigpad-hint'+(e.signature?' hidden':'')+'" id="sigpadInv-hint">Tanda tangan di sini</div></div>' +
+        '<div class="sig-toolbar"><button class="btn btn-ghost btn-sm" onclick="clearSig(\'sigpadInv\')">Bersihkan</button>' +
+          '<button class="btn btn-ghost btn-sm" onclick="useCompanySignature(\'sigpadInv\')">Pakai TTD Perusahaan</button>' +
+          '<label class="btn btn-ghost btn-sm" style="cursor:pointer">Upload<input type="file" accept="image/*" style="display:none" onchange="uploadSig(this,\'sigpadInv\')"></label></div>' +
+      '</div>' +
+      '<div><label style="font-size:12px;font-weight:600;color:var(--muted)">Cap / Stempel</label>' +
+        '<div class="cap-row">' +
+          (e.stamp ? '<img class="cap-prev" src="'+esc(e.stamp)+'" alt="cap">' : '<div class="cap-prev empty">Tidak ada cap</div>') +
+          '<div class="up-btns">' +
+            '<button class="btn btn-ghost btn-sm" onclick="invUseCompanyStamp()">Pakai Cap Perusahaan</button>' +
+            '<label class="btn btn-ghost btn-sm" style="cursor:pointer">Upload<input type="file" accept="image/*" style="display:none" onchange="invUploadCap(this)"></label>' +
+            (e.stamp ? '<button class="btn btn-ghost btn-sm" onclick="invClearCap()">Hapus</button>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
     '<div class="summary-box" id="edSummary">'+summaryHtml(t, e.currency)+'</div>' +
     '<div class="modal-actions">' +
       '<button class="btn btn-ghost" onclick="closeModal()">Batal</button>' +
       '<button class="btn btn-primary" onclick="saveInvoice()">Simpan Invoice</button>' +
     '</div>' +
   '</div>');
+  setTimeout(function(){ initSigPad('sigpadInv', editorState, 'signature'); }, 60);
 }
 
 function computeTotals(e){
@@ -1249,7 +1285,24 @@ function syncEditorFields(){
   e.templateId = $('edTemplate').value;
   e.discountRate = Number($('edDiscount').value)||0;
   e.notes = $('edNotes').value;
+  if($('edSignerName')) e.signerName = $('edSignerName').value.trim();
+  if($('edSignerTitle')) e.signerTitle = $('edSignerTitle').value.trim();
 }
+function invUseCompanyStamp(){
+  var stamp = (state.db.settings||{}).stampUrl;
+  if(!stamp){ toast('Belum ada cap perusahaan. Atur di Pengaturan → Cap/Stempel.'); return; }
+  syncEditorFields(); editorState.stamp = stamp; renderEditor();
+}
+function invUploadCap(input){
+  var file = input.files && input.files[0]; if(!file) return;
+  syncEditorFields();
+  loading(true);
+  compressImage(file, 420, 0.9).then(function(dataUrl){
+    editorState.stamp = dataUrl; loading(false); renderEditor();
+  }).catch(function(e){ loading(false); toast(e.message); });
+}
+function invClearCap(){ syncEditorFields(); editorState.stamp=''; renderEditor(); }
+
 function saveInvoice(){
   syncEditorFields();
   var e = editorState;
@@ -1322,10 +1375,28 @@ function renderPrintSheet(id){
     '</div>' + phases +
     paymentLinesHtml(s) +
     (inv.notes ? '<p style="margin-top:10px" class="print-meta"><b>Catatan:</b> '+esc(inv.notes)+'</p>' : '') +
+    invoiceSignBlock(inv, s) +
     '<p style="margin-top:22px;font-size:11px;color:#888">Dibuat dengan '+esc(s.appName||'Universal Invoice Manager')+' · '+esc(s.companyWebsite||'')+'</p>' +
   '</div>';
   $('printPreview').innerHTML = html;
   $('printArea').innerHTML = html;
+}
+function invoiceSignBlock(inv, s){
+  var signImg = inv.signature || '';
+  var capImg = inv.stamp || '';
+  var explicitName = inv.signerName || s.signerName || '';
+  if(!signImg && !capImg && !explicitName) return '';
+  var name = explicitName || s.companyName || '';
+  var title = inv.signerTitle || s.signerTitle || '';
+  var inner = (capImg?'<img class="sign-cap" src="'+esc(capImg)+'" alt="cap">':'') + (signImg?'<img class="sign-sig" src="'+esc(signImg)+'" alt="ttd">':'');
+  return '<div class="sign-wrap"><div class="sign-block">' +
+    '<div class="sign-place">'+fmtDate(inv.issueDate)+'</div>' +
+    '<div class="sign-role">Hormat kami,</div>' +
+    '<div class="sign-ttd">'+inner+'</div>' +
+    '<div class="sign-name">'+esc(name||'(...............)')+'</div>' +
+    (title?'<div class="sign-job">'+esc(title)+'</div>':'') +
+    ((s.companyName && s.companyName!==name)?'<div class="sign-job">'+esc(s.companyName)+'</div>':'') +
+  '</div></div>';
 }
 function doPrint(){
   $('printArea').classList.remove('hidden');
@@ -1726,7 +1797,7 @@ function renderBeritaEditor(){
       '<div class="sigpad-wrap'+(hasTtd?' has-ink':'')+'"><canvas id="sigpad'+n+'" class="sigpad"></canvas>' +
         '<div class="sigpad-hint'+(hasTtd?' hidden':'')+'" id="sigpad'+n+'-hint">Tanda tangan di sini</div></div>' +
       '<div class="sig-toolbar"><button class="btn btn-ghost btn-sm" onclick="clearSig(\'sigpad'+n+'\')">Bersihkan</button>' +
-        '<label class="btn btn-ghost btn-sm" style="cursor:pointer">Upload<input type="file" accept="image/*" style="display:none" onchange="uploadSig(this,\''+tkey+'\')"></label></div>' +
+        '<label class="btn btn-ghost btn-sm" style="cursor:pointer">Upload<input type="file" accept="image/*" style="display:none" onchange="uploadSig(this,\'sigpad'+n+'\')"></label></div>' +
       capBox +
     '</div>';
   };
@@ -1765,7 +1836,7 @@ function renderBeritaEditor(){
       '<button class="btn btn-primary" onclick="saveBerita()">Simpan</button>' +
     '</div></div>';
   openModal(html);
-  setTimeout(function(){ initSigPad('sigpad1','ttd1'); initSigPad('sigpad2','ttd2'); }, 60);
+  setTimeout(function(){ initSigPad('sigpad1', baState, 'ttd1'); initSigPad('sigpad2', baState, 'ttd2'); }, 60);
 }
 
 /* ---- Signature pad ---- */
@@ -1773,7 +1844,7 @@ var _sigPads = {};
 var _sigActive = null;
 var _sigGlobalBound = false;
 function _sigGlobalEnd(){ if(_sigActive){ var id=_sigActive.id; _sigActive.drawing=false; _sigActive=null; captureSig(id); } }
-function initSigPad(canvasId, key){
+function initSigPad(canvasId, store, key){
   var cv = document.getElementById(canvasId); if(!cv) return;
   if(!_sigGlobalBound){ window.addEventListener('mouseup', _sigGlobalEnd); window.addEventListener('touchend', _sigGlobalEnd); _sigGlobalBound = true; }
   var wrap = cv.parentNode;
@@ -1783,9 +1854,9 @@ function initSigPad(canvasId, key){
   var ctx = cv.getContext('2d');
   ctx.scale(ratio, ratio);
   ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#12324a';
-  var pad = { id:canvasId, cv:cv, ctx:ctx, drawing:false, empty:true, key:key, w:w, h:h };
+  var pad = { id:canvasId, cv:cv, ctx:ctx, drawing:false, empty:true, store:store, key:key, w:w, h:h };
   _sigPads[canvasId] = pad;
-  if(baState[key]){ var img = new Image(); img.onload = function(){ ctx.drawImage(img,0,0,w,h); }; img.src = baState[key]; pad.empty = false; }
+  if(store[key]){ var img = new Image(); img.onload = function(){ ctx.drawImage(img,0,0,w,h); }; img.src = store[key]; pad.empty = false; }
   function pos(e){ var r = cv.getBoundingClientRect(); var t = e.touches&&e.touches[0]?e.touches[0]:e; return { x:t.clientX-r.left, y:t.clientY-r.top }; }
   function start(e){ e.preventDefault(); pad.drawing = true; pad.empty = false; _sigActive = pad; wrap.classList.add('has-ink'); var hn=document.getElementById(canvasId+'-hint'); if(hn) hn.classList.add('hidden'); var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }
   function move(e){ if(!pad.drawing) return; e.preventDefault(); var p = pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); }
@@ -1800,21 +1871,37 @@ function captureSig(canvasId){
     tmp.getContext('2d').drawImage(pad.cv, 0, 0, tmp.width, tmp.height);
     data = tmp.toDataURL('image/png');
   }
-  baState[pad.key] = data;
+  pad.store[pad.key] = data;
+}
+function redrawSig(canvasId){
+  var pad = _sigPads[canvasId]; if(!pad) return;
+  pad.ctx.clearRect(0,0,pad.cv.width,pad.cv.height);
+  if(pad.store[pad.key]){
+    var img = new Image(); img.onload = function(){ pad.ctx.drawImage(img,0,0,pad.w,pad.h); }; img.src = pad.store[pad.key];
+    pad.empty = false; pad.cv.parentNode.classList.add('has-ink');
+    var hn = document.getElementById(canvasId+'-hint'); if(hn) hn.classList.add('hidden');
+  }
 }
 function clearSig(canvasId){
   var pad = _sigPads[canvasId]; if(!pad) return;
   pad.ctx.clearRect(0,0,pad.cv.width,pad.cv.height); pad.empty = true;
   pad.cv.parentNode.classList.remove('has-ink');
   var hn = document.getElementById(canvasId+'-hint'); if(hn) hn.classList.remove('hidden');
-  baState[pad.key] = '';
+  pad.store[pad.key] = '';
 }
-function uploadSig(input, key){
+function uploadSig(input, canvasId){
   var file = input.files && input.files[0]; if(!file) return;
+  var pad = _sigPads[canvasId]; if(!pad){ return; }
   loading(true);
   compressImage(file, 320, 0.85).then(function(dataUrl){
-    baState[key] = dataUrl; loading(false); renderBeritaEditor();
+    pad.store[pad.key] = dataUrl; loading(false); redrawSig(canvasId);
   }).catch(function(e){ loading(false); toast(e.message); });
+}
+function useCompanySignature(canvasId){
+  var pad = _sigPads[canvasId]; if(!pad) return;
+  var sig = (state.db.settings||{}).signatureUrl;
+  if(!sig){ toast('Belum ada tanda tangan perusahaan. Atur di Pengaturan.'); return; }
+  pad.store[pad.key] = sig; redrawSig(canvasId);
 }
 
 /* ---- Cap / stempel ---- */
@@ -1979,6 +2066,8 @@ function viewSettings(){
   var pmRows = s.paymentMethods.map(pmRow).join('') || '<div class="empty" style="padding:14px">Belum ada metode pembayaran.</div>';
   var curStamp = (typeof _stampData !== 'undefined' && _stampData !== null) ? _stampData : (s.stampUrl || '');
   var isDataStamp = curStamp && String(curStamp).indexOf('data:') === 0;
+  var curSign = (typeof _signatureData !== 'undefined' && _signatureData !== null) ? _signatureData : (s.signatureUrl || '');
+  var isDataSign = curSign && String(curSign).indexOf('data:') === 0;
 
   return '<div class="card card-p"><div class="section-title" style="margin-top:0">Identitas Aplikasi</div>' +
     '<div class="grid-2" style="align-items:start">' +
@@ -2023,6 +2112,20 @@ function viewSettings(){
         '</div>' +
         '<input id="stStampUrl" placeholder="atau tempel URL gambar cap" value="'+esc(isDataStamp?'':curStamp)+'" oninput="onStampUrlInput(this.value)">' +
         '<span style="font-size:11px;color:var(--muted)">Sebaiknya gambar PNG latar transparan. Dipakai sebagai cap basah digital di Berita Acara.</span>' +
+      '</div>' +
+      '<div class="field"><label>Tanda Tangan Perusahaan (untuk Invoice & Berita Acara)</label>' +
+        '<div class="uploader">' +
+          '<img id="stSignPrev" class="up-prev'+(curSign?' show':'')+'" src="'+esc(curSign)+'" alt="ttd">' +
+          '<div class="up-btns">' +
+            '<label class="btn btn-ghost btn-sm" style="cursor:pointer">Upload TTD<input type="file" accept="image/*" style="display:none" onchange="onSignUpload(this)"></label>' +
+            '<button class="btn btn-ghost btn-sm" onclick="removeSign()">Hapus TTD</button>' +
+          '</div>' +
+        '</div>' +
+        '<input id="stSignUrl" placeholder="atau tempel URL gambar tanda tangan" value="'+esc(isDataSign?'':curSign)+'" oninput="onSignUrlInput(this.value)">' +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="field"><label>Nama Penanda Tangan (default)</label><input id="stSignerName" value="'+esc(s.signerName||'')+'" placeholder="mis. nama direktur"></div>' +
+        '<div class="field"><label>Jabatan (default)</label><input id="stSignerTitle" value="'+esc(s.signerTitle||'')+'" placeholder="mis. Direktur"></div>' +
       '</div>' +
     '</div>' +
       '<div class="card card-p"><div class="section-title" style="margin-top:0">Mata Uang & Pajak</div>' +
@@ -2166,6 +2269,27 @@ function removeStamp(){
   var prev = $('stStampPrev'); if(prev){ prev.src=''; prev.classList.remove('show'); }
   var urlInp = $('stStampUrl'); if(urlInp) urlInp.value = '';
 }
+var _signatureData = null; // tanda tangan perusahaan
+function onSignUpload(input){
+  var file = input.files && input.files[0]; if(!file) return;
+  loading(true);
+  compressImage(file, 360, 0.9).then(function(dataUrl){
+    _signatureData = dataUrl;
+    var prev = $('stSignPrev'); if(prev){ prev.src = dataUrl; prev.classList.add('show'); }
+    var urlInp = $('stSignUrl'); if(urlInp) urlInp.value = '';
+    loading(false); toast('Tanda tangan siap disimpan');
+  }).catch(function(e){ loading(false); toast(e.message); });
+}
+function onSignUrlInput(val){
+  _signatureData = null;
+  var prev = $('stSignPrev');
+  if(prev){ if(val){ prev.src = val; prev.classList.add('show'); } else { prev.classList.remove('show'); } }
+}
+function removeSign(){
+  _signatureData = '';
+  var prev = $('stSignPrev'); if(prev){ prev.src=''; prev.classList.remove('show'); }
+  var urlInp = $('stSignUrl'); if(urlInp) urlInp.value = '';
+}
 function saveSettings(){
   // Logo perusahaan: pakai unggahan baru bila ada; kalau tidak, pakai URL yang diketik;
   // kalau keduanya kosong, PERTAHANKAN logo tersimpan (agar tidak terhapus saat simpan ulang).
@@ -2178,6 +2302,9 @@ function saveSettings(){
   var stampVal;
   if(typeof _stampData!=='undefined' && _stampData !== null){ stampVal = _stampData; }
   else { var su = ($('stStampUrl')&&$('stStampUrl').value.trim())||''; stampVal = su ? su : (state.db.settings.stampUrl || ''); }
+  var signVal;
+  if(typeof _signatureData!=='undefined' && _signatureData !== null){ signVal = _signatureData; }
+  else { var sg = ($('stSignUrl')&&$('stSignUrl').value.trim())||''; signVal = sg ? sg : (state.db.settings.signatureUrl || ''); }
   // bersihkan metode pembayaran kosong
   var methods = (state.db.settings.paymentMethods||[]).filter(function(m){
     return m && (m.label || m.accountNumber || m.accountName || m.note || m.type==='qris');
@@ -2186,6 +2313,9 @@ function saveSettings(){
     appName: ($('stAppName').value.trim() || 'Universal Invoice Manager'),
     appLogoUrl: appLogoVal,
     stampUrl: stampVal,
+    signatureUrl: signVal,
+    signerName: ($('stSignerName')&&$('stSignerName').value.trim())||'',
+    signerTitle: ($('stSignerTitle')&&$('stSignerTitle').value.trim())||'',
     companyName: $('stCompanyName').value.trim(),
     companyEmail: $('stCompanyEmail').value.trim(),
     companyPhone: $('stCompanyPhone').value.trim(),
@@ -2200,7 +2330,7 @@ function saveSettings(){
   };
   loading(true);
   api('saveSettings', p).then(function(newS){
-    state.db.settings = newS; _logoData = null; _appLogoData = null; _stampData = null;
+    state.db.settings = newS; _logoData = null; _appLogoData = null; _stampData = null; _signatureData = null;
     applyBranding(newS.appName, newS.appLogoUrl);
     loading(false); toast('Pengaturan tersimpan ✓'); render();
   }).catch(function(e){ loading(false); toast(e.message); });
